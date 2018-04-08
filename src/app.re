@@ -1,8 +1,8 @@
 /*
 
     Todo:
-    [ ] - make counter count down rather than up
-    [ ] - provide way to set timerOption
+    [x] - make counter count down rather than up
+    [x] - provide way to set timerOption
     [ ] - explore chrome extension
 
  */
@@ -47,7 +47,7 @@ type state = {
 let minsToSeconds = (seconds: int) : int => seconds * 60;
 
 let defaultSettings: settings = {
-  pomodoro: 1 |> minsToSeconds,
+  pomodoro: 25 |> minsToSeconds,
   shortBreak: 5 |> minsToSeconds,
   longBreak: 10 |> minsToSeconds,
 };
@@ -71,14 +71,13 @@ let timerOptionDurations = (options: timerOption, settings: settings) : int =>
 let isFinished = ({count}: state) : bool => count == 0;
 
 /*
-let isBeginning = ({timer, count, settings}: state) : bool =>
-  switch (timer.timerOption) {
-  | Pomodoro => settings.pomodoro == count
-  | LongBreak => settings.longBreak == count
-  | ShortBreak => settings.shortBreak == count
-  };
-*/
-
+ let isBeginning = ({timer, count, settings}: state) : bool =>
+   switch (timer.timerOption) {
+   | Pomodoro => settings.pomodoro == count
+   | LongBreak => settings.longBreak == count
+   | ShortBreak => settings.shortBreak == count
+   };
+ */
 let component = ReasonReact.reducerComponent("App");
 
 let make = _children => {
@@ -94,13 +93,17 @@ let make = _children => {
   reducer: (action, state) =>
     switch (action) {
     | Start(timerOption, timerId) =>
-      ReasonReact.Update({
-        ...state,
-        timer: {
-          timerOption,
-          timerState: Started(timerId),
+      ReasonReact.UpdateWithSideEffects(
+        {
+          ...state,
+          count: timerOptionDurations(timerOption, state.settings),
+          timer: {
+            timerOption,
+            timerState: Started(timerId),
+          },
         },
-      })
+        (_self => stopTimer(state.timer.timerState)),
+      )
     | Pause =>
       ReasonReact.UpdateWithSideEffects(
         {
@@ -148,5 +151,16 @@ let make = _children => {
       <button onClick=(_e => send(Restart(startTimer(send))))>
         (Utils.text("Restart"))
       </button>
+      <div>
+        <button onClick=(_e => send(Start(Pomodoro, startTimer(send))))>
+          (Utils.text("Start Focusing"))
+        </button>
+        <button onClick=(_e => send(Start(LongBreak, startTimer(send))))>
+          (Utils.text("Start Short Break"))
+        </button>
+        <button onClick=(_e => send(Start(ShortBreak, startTimer(send))))>
+          (Utils.text("Start Short Break"))
+        </button>
+      </div>
     </div>,
 };
