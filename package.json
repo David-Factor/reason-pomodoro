@@ -1,10 +1,10 @@
 {
-  "name": "test-reason",
+  "name": "reason-pomodoro",
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "react": "^16.3.0",
-    "react-dom": "^16.3.0",
+    "react": "^16.3.1",
+    "react-dom": "^16.3.1",
     "reason-scripts": "0.8.0"
   },
   "scripts": {

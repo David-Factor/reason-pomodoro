@@ -3,6 +3,9 @@
     Todo:
     [x] - make counter count down rather than up
     [x] - provide way to set timerOption
+    [x] - show clock in digital format
+    [~] - make the actions buttons state dependent -> clicking restart should show timerOption menu
+    [ ] - add options: allow timer options to be set by user
     [ ] - explore chrome extension
 
  */
@@ -22,7 +25,8 @@ type timerState =
   | Finished;
 
 type action =
-  | Start(timerOption, Js.Global.intervalId)
+  | StartTimerOption(timerOption, Js.Global.intervalId)
+  | Continue(Js.Global.intervalId)
   | Pause
   | Restart(Js.Global.intervalId)
   | Tick;
@@ -46,6 +50,18 @@ type state = {
 
 let minsToSeconds = (seconds: int) : int => seconds * 60;
 
+let toDecimalTime = (count: int) : string => {
+  let minutes: int = (count |> float_of_int) /. 60. |> floor |> int_of_float;
+  let seconds: int = count mod 60;
+  let format = count =>
+    switch ((count: int)) {
+    | 0 => "00"
+    | _ when count < 10 => "0" ++ (count |> string_of_int)
+    | _ => count |> string_of_int
+    };
+  format(minutes) ++ ":" ++ format(seconds);
+};
+
 let defaultSettings: settings = {
   pomodoro: 25 |> minsToSeconds,
   shortBreak: 5 |> minsToSeconds,
@@ -61,23 +77,22 @@ let stopTimer = (timerId: timerState) : unit =>
   | _ => ()
   };
 
-let timerOptionDurations = (options: timerOption, settings: settings) : int =>
+let timerOptionDuration = (options: timerOption, settings: settings) : int =>
   switch (options) {
   | Pomodoro => settings.pomodoro
   | LongBreak => settings.longBreak
   | ShortBreak => settings.shortBreak
   };
 
+let timerOptionString = (options: timerOption) : string =>
+  switch (options) {
+  | Pomodoro => "Pomodoro"
+  | LongBreak => "Long break"
+  | ShortBreak => "Short break"
+  };
+
 let isFinished = ({count}: state) : bool => count == 0;
 
-/*
- let isBeginning = ({timer, count, settings}: state) : bool =>
-   switch (timer.timerOption) {
-   | Pomodoro => settings.pomodoro == count
-   | LongBreak => settings.longBreak == count
-   | ShortBreak => settings.shortBreak == count
-   };
- */
 let component = ReasonReact.reducerComponent("App");
 
 let make = _children => {
@@ -92,13 +107,36 @@ let make = _children => {
   },
   reducer: (action, state) =>
     switch (action) {
-    | Start(timerOption, timerId) =>
+    | StartTimerOption(timerOption, timerId) =>
       ReasonReact.UpdateWithSideEffects(
         {
           ...state,
-          count: timerOptionDurations(timerOption, state.settings),
+          count: timerOptionDuration(timerOption, state.settings),
           timer: {
             timerOption,
+            timerState: Started(timerId),
+          },
+        },
+        (_self => stopTimer(state.timer.timerState)),
+      )
+    | Continue(timerId) =>
+      ReasonReact.UpdateWithSideEffects(
+        {
+          ...state,
+          timer: {
+            ...state.timer,
+            timerState: Started(timerId),
+          },
+        },
+        (_self => stopTimer(state.timer.timerState)),
+      )
+    | Restart(timerId) =>
+      ReasonReact.UpdateWithSideEffects(
+        {
+          ...state,
+          count: timerOptionDuration(state.timer.timerOption, state.settings),
+          timer: {
+            timerOption: state.timer.timerOption,
             timerState: Started(timerId),
           },
         },
@@ -111,19 +149,6 @@ let make = _children => {
           timer: {
             timerOption: state.timer.timerOption,
             timerState: Paused,
-          },
-        },
-        (_self => stopTimer(state.timer.timerState)),
-      )
-    | Restart(timerId) =>
-      ReasonReact.UpdateWithSideEffects(
-        {
-          ...state,
-          count:
-            timerOptionDurations(state.timer.timerOption, state.settings),
-          timer: {
-            timerOption: state.timer.timerOption,
-            timerState: Started(timerId),
           },
         },
         (_self => stopTimer(state.timer.timerState)),
@@ -141,26 +166,44 @@ let make = _children => {
       )
     | Tick => ReasonReact.Update({...state, count: state.count - 1})
     },
-  render: ({state, send}) =>
-    <div>
-      <h1> (Utils.text(string_of_int(state.count))) </h1>
-      <button onClick=(_e => send(Start(Pomodoro, startTimer(send))))>
-        (Utils.text("Start"))
-      </button>
-      <button onClick=(_e => send(Pause))> (Utils.text("Pause")) </button>
-      <button onClick=(_e => send(Restart(startTimer(send))))>
-        (Utils.text("Restart"))
-      </button>
+  render: ({state, send}) => {
+    let pauseButton = <Button onClick=(_e => send(Pause)) text="Pause" />;
+    let restartButton =
+      <Button
+        onClick=(_e => send(Restart(startTimer(send))))
+        text="Restart"
+      />;
+    let continueButton = <Button onClick=(_e => send(Continue(startTimer(send)))) text="Continue" />;
+    let timerControls = <div> pauseButton restartButton </div>;
+    let timerOptions =
       <div>
-        <button onClick=(_e => send(Start(Pomodoro, startTimer(send))))>
-          (Utils.text("Start Focusing"))
-        </button>
-        <button onClick=(_e => send(Start(LongBreak, startTimer(send))))>
-          (Utils.text("Start Short Break"))
-        </button>
-        <button onClick=(_e => send(Start(ShortBreak, startTimer(send))))>
-          (Utils.text("Start Short Break"))
-        </button>
-      </div>
-    </div>,
+        <Button
+          onClick=(_e => send(StartTimerOption(Pomodoro, startTimer(send))))
+          text="Start Focusing"
+        />
+        <Button
+          onClick=(
+            _e => send(StartTimerOption(LongBreak, startTimer(send)))
+          )
+          text="Start Long Break"
+        />
+        <Button
+          onClick=(
+            _e => send(StartTimerOption(ShortBreak, startTimer(send)))
+          )
+          text="Start Short Break"
+        />
+      </div>;
+    let menu =
+      switch (state.timer.timerState) {
+      | Started(_) => <div> timerControls timerOptions </div>
+      | Paused => <div> restartButton continueButton timerOptions </div>
+      | _ => <div> timerOptions </div>
+      };
+    <div>
+      <h4> (Utils.text(timerOptionString(state.timer.timerOption))) </h4>
+      <h1> (Utils.text(toDecimalTime(state.count))) </h1>
+      menu
+    </div>;
+  },
 };
