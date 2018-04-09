@@ -2,6 +2,8 @@
 
 [@bs.module "./registerServiceWorker"] external register_service_worker : unit => unit = "default";
 
+open Belt;
+
 ReactDOMRe.renderToElementWithId(<App />, "root");
 
 register_service_worker();

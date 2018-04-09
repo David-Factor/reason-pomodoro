@@ -5,6 +5,8 @@
     [x] - provide way to set timerOption
     [x] - show clock in digital format
     [~] - make the actions buttons state dependent -> clicking restart should show timerOption menu
+    [~] - allow user to start pomodoro cycle
+          + add start pomodoro cycle button
     [ ] - add options: allow timer options to be set by user
     [ ] - explore chrome extension
 
@@ -12,6 +14,8 @@
 [%bs.raw {|require('./app.css')|}];
 
 [@bs.module] external logo : string = "./logo.svg";
+
+open Belt;
 
 type timerOption =
   | Pomodoro
@@ -31,21 +35,40 @@ type action =
   | Restart(Js.Global.intervalId)
   | Tick;
 
+type timer = {
+  timerOption,
+  timerState,
+};
+
 type settings = {
   pomodoro: int,
   shortBreak: int,
   longBreak: int,
 };
 
-type timer = {
-  timerOption,
-  timerState,
+type cycle = {
+  previous: list(timerOption),
+  current: timerOption,
+  remaining: list(timerOption),
 };
 
 type state = {
   count: int,
   timer,
   settings,
+  cycle,
+};
+
+let nextCycle = ({remaining, current, previous}: cycle) : cycle => {
+  let nextCurrent =
+    Belt.List.head(remaining) |> Js.Option.getWithDefault(Pomodoro);
+  let nextRemaining =
+    Belt.List.drop(remaining, 1) |> Js.Option.getWithDefault([]);
+  {
+    current: nextCurrent,
+    remaining: Belt.List.concat(nextRemaining, [current]),
+    previous: Belt.List.concat([current], previous),
+  };
 };
 
 let minsToSeconds = (seconds: int) : int => seconds * 60;
@@ -104,6 +127,11 @@ let make = _children => {
       timerState: Beginning,
     },
     settings: defaultSettings,
+    cycle: {
+      previous: [],
+      remaining: [ShortBreak, Pomodoro, LongBreak],
+      current: Pomodoro,
+    },
   },
   reducer: (action, state) =>
     switch (action) {
@@ -164,7 +192,12 @@ let make = _children => {
         },
         (_self => stopTimer(state.timer.timerState)),
       )
-    | Tick => ReasonReact.Update({...state, count: state.count - 1})
+    | Tick =>
+      ReasonReact.Update({
+        ...state,
+        cycle: nextCycle(state.cycle),
+        count: state.count - 1,
+      })
     },
   render: ({state, send}) => {
     let pauseButton = <Button onClick=(_e => send(Pause)) text="Pause" />;
@@ -173,7 +206,11 @@ let make = _children => {
         onClick=(_e => send(Restart(startTimer(send))))
         text="Restart"
       />;
-    let continueButton = <Button onClick=(_e => send(Continue(startTimer(send)))) text="Continue" />;
+    let continueButton =
+      <Button
+        onClick=(_e => send(Continue(startTimer(send))))
+        text="Continue"
+      />;
     let timerControls = <div> pauseButton restartButton </div>;
     let timerOptions =
       <div>
@@ -204,6 +241,7 @@ let make = _children => {
       <h4> (Utils.text(timerOptionString(state.timer.timerOption))) </h4>
       <h1> (Utils.text(toDecimalTime(state.count))) </h1>
       menu
+      <h4> (Utils.text(timerOptionString(state.cycle.current))) </h4>
     </div>;
   },
 };
